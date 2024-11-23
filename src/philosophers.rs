@@ -31,6 +31,7 @@ where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
+    /// TODO:
     pub fn new(underlying: Resources, identifier: ResourceIdentifier) -> Self {
         Self {
             is_clean: false,
@@ -88,6 +89,7 @@ where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
+    /// TODO:
     pub fn new(
         my_id: PhilosopherIdentifier,
         mut starting_resources: Vec<
@@ -117,6 +119,7 @@ where
         }
     }
 
+    /// TODO:
     fn dummy_job(&mut self) -> bool {
         self.holding
             .sort_by(|z1, z2| z1.identifier.cmp(&z2.identifier));
@@ -135,6 +138,12 @@ where
         have_all_needed
     }
 
+    /// if we have all the `resources_needed` to do the `job`
+    /// with them and the given `ctx` `Context`
+    /// we get back the possibly mutated `Resources`
+    /// put them back into `holding`, but now as dirty so we will give them
+    /// up if requested rather than hogging them for only our jobs
+    /// return if we actually had everything needed to do the job (which also means we did the job)
     fn do_job(&mut self, ctx: Context) -> bool {
         self.holding
             .sort_by(|z1, z2| z1.identifier.cmp(&z2.identifier));
@@ -169,6 +178,10 @@ where
         have_all_needed
     }
 
+    /// listen for the requests from other `Philosopher`'s for resources
+    /// send it to them if we have it and it is dirty
+    /// they get it as a clean version, so they will keep it for their own use first
+    /// before we would request it and try to steal it back
     fn process_request(&mut self, timeout: Duration) -> [bool; 3] {
         let mut got_request = false;
         let mut had_the_resource = false;
@@ -201,9 +214,11 @@ where
         [got_request, had_the_resource, gave_up_the_resource]
     }
 
+    /// send a request for a single resource that we need
     fn send_single_request(&mut self, which_one: Option<ResourceIdentifier>) -> bool {
         match which_one {
             None => {
+                // do for the first one we need but don't have
                 let held_rids = self
                     .holding
                     .iter()
@@ -220,6 +235,10 @@ where
                 }
             }
             Some(which_one) => {
+                // if we don't actually need this resource it won't be in request_sending as a key
+                // so no requests will be sent in this case
+                // but if we do need it, we should have the channels to all the other `Philosopher`'s who
+                // can give it to us
                 if let Some(where_to_send_requests) = self.request_sending.get(&which_one) {
                     for cur_send_request in where_to_send_requests {
                         let _ = cur_send_request.send((self.my_id.clone(), which_one));
@@ -232,6 +251,9 @@ where
         }
     }
 
+    /// attempt to receive a resource on the `resource_receiving` channel
+    /// if it is received, put it `holding` while maintaining the order
+    /// return if a resource was received or not
     fn receive_resource(&mut self, timeout: Duration) -> bool {
         if let Ok(rcvd_resource) = self.resource_receiving.recv_timeout(timeout) {
             let where_to_insert = self
@@ -246,6 +268,9 @@ where
         false
     }
 
+    /// the other `Philosopher` `who`
+    /// might send a request for a `Resources` from this `self`
+    /// so put the `sender` that can send it to them into `resource_sending`
     pub fn peer_will_request(
         &mut self,
         who: PhilosopherIdentifier,
@@ -254,6 +279,10 @@ where
         let _old_value = self.resource_sending.insert(who, sender);
     }
 
+    /// this `Philosopher` needs the resource associated with
+    /// the `ResourceIdentifier` `what`
+    /// so put it in `request_sending` so it can send the request
+    /// to the other `Philosopher` which holds the corresponding `Receiver`
     pub fn i_will_request(
         &mut self,
         what: ResourceIdentifier,
@@ -429,7 +458,7 @@ where
         &mut self,
         quick_timeout: Duration,
         full_timeout: Duration,
-        contexts: Receiver<Option<Context>>,
+        context_or_stop: Receiver<Option<Context>>,
     ) where
         Context: Clone,
         PhilosopherIdentifier: core::fmt::Debug + core::fmt::Display,
@@ -455,7 +484,7 @@ where
                     rcvd_resource = self.receive_resource(quick_timeout);
                 }
             }
-            let ctx_rcv = contexts.recv_timeout(quick_timeout);
+            let ctx_rcv = context_or_stop.recv_timeout(quick_timeout);
             match ctx_rcv {
                 Ok(Some(ctx)) => {
                     let mut j = self.job_count.lock().expect("lock fine");
@@ -491,6 +520,11 @@ where
     }
 }
 
+/// only 1 philosopher will be doing work associated with `selfish_ctx`
+/// all the others will be listening to requests for resources from them
+/// and providing them in return, doing no work or using those resources themselves
+/// we don't know who has the resources for the work to be done among all of `philosophers`
+/// so they do so with the request, response mechanism
 pub(crate) fn make_one_selfish<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>(
     which_selfish: usize,
     num_philosophers: usize,
@@ -535,7 +569,6 @@ where
     to_return
 }
 
-// TODO:
 /// the jobs that would be done with `given_contexts`
 /// - if they have different philosophers, must commute
 /// - if they use disjoint resources (which implies different philosophers) they must even interleave as well
@@ -555,35 +588,38 @@ where
     ResourceIdentifier: core::fmt::Debug,
     Resources: core::fmt::Debug,
 {
-    let given_contexts = given_contexts
-        .map(|(who_to_do, cur_ctx)| {
-            let new_who_to_do = philosophers
-                .iter()
-                .enumerate()
-                .find_map(|(z, w)| if w.my_id == who_to_do { Some(z) } else { None })
-                .expect("each philosopher identifier is in the list");
-            (new_who_to_do, cur_ctx)
-        })
-        .collect::<Vec<_>>();
+    let mut philo_2_idx: HashMap<_, _> = HashMap::with_capacity(num_philosophers);
+    for (idx, philo) in philosophers.iter().enumerate() {
+        philo_2_idx.insert(philo.my_id.clone(), idx);
+    }
     let mut join_handles = Vec::with_capacity(num_philosophers);
-    let mut stoppers = Vec::with_capacity(num_philosophers);
+    let mut work_or_stop_signals = Vec::with_capacity(num_philosophers);
     for mut philo in philosophers {
-        let (stopper_send, stopper) = mpsc::channel();
-        stoppers.push(stopper_send);
+        let (work_or_stop_send, work_or_stop) = mpsc::channel();
+        work_or_stop_signals.push(work_or_stop_send);
         let jh = thread::spawn(move || {
             philo.be_fair(
                 Duration::from_millis(50),
                 Duration::from_millis(300),
-                stopper,
+                work_or_stop,
             );
             philo
         });
         join_handles.push(jh);
     }
     for (who_to_do, cur_ctx) in given_contexts {
-        let _ = stoppers[who_to_do].send(Some(cur_ctx));
+        let sent_work_2_philo = work_or_stop_signals[*philo_2_idx
+            .get(&who_to_do)
+            .expect("this philosopher exists")]
+        .send(Some(cur_ctx));
+        // TODO: what to do if sending work to a philosopher doesn't work
+        // they are using `be_fair` so they should be listening on their `context_or_stop`
+        // not ignoring it
+        if true {
+            let () = sent_work_2_philo.expect("sending work to a philosopher suceeds");
+        }
     }
-    for stopper in stoppers {
+    for stopper in work_or_stop_signals {
         let _ = stopper.send(None);
     }
     join_handles
