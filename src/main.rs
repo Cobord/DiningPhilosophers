@@ -1,4 +1,7 @@
+mod bipartite_graph;
 mod communication_setup;
+mod dag_of_tasks;
+mod dag_utils;
 mod philosophers;
 mod util;
 
@@ -100,7 +103,7 @@ fn main() {
     }
 
     let which_fairly = [0, 2, 4, 2];
-    let _philosophers = make_all_fair(
+    let (_philosophers, all_finished) = make_all_fair(
         NUM_PHILOSOPHERS,
         philosophers,
         which_fairly.into_iter().map(|which_now| {
@@ -110,4 +113,5 @@ fn main() {
             )
         }),
     );
+    println!("{all_finished:?}");
 }

@@ -5,85 +5,10 @@ use std::{
     sync::{mpsc, Arc, Mutex},
 };
 
-use crate::philosophers::{CleanAndAnnotated, Philosopher};
-
-#[allow(dead_code)]
-pub struct BipartiteGraph<A, B> {
-    num_a_nodes: usize,
-    all_a_nodes: HashSet<A>,
-    num_b_nodes: usize,
-    all_b_nodes: HashSet<B>,
-    edges: HashSet<(A, B)>,
-}
-
-impl<A, B> BipartiteGraph<A, B>
-where
-    A: Clone + Eq + Hash,
-    B: Clone + Eq + Hash,
-{
-    #[allow(dead_code)]
-    pub fn new() -> Self {
-        Self {
-            num_a_nodes: 0,
-            all_a_nodes: HashSet::new(),
-            num_b_nodes: 0,
-            all_b_nodes: HashSet::new(),
-            edges: HashSet::new(),
-        }
-    }
-
-    pub fn add_a(&mut self, new_a: A) {
-        let newly_inserted = self.all_a_nodes.insert(new_a);
-        if newly_inserted {
-            self.num_a_nodes += 1;
-        }
-    }
-
-    pub fn add_b(&mut self, new_b: B) {
-        let newly_inserted = self.all_b_nodes.insert(new_b);
-        if newly_inserted {
-            self.num_b_nodes += 1;
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn add_edge(&mut self, from_a: A, to_b: B) {
-        if !self.all_a_nodes.contains(&from_a) {
-            self.add_a(from_a.clone());
-        }
-        if !self.all_b_nodes.contains(&to_b) {
-            self.add_b(to_b.clone());
-        }
-        self.edges.insert((from_a, to_b));
-    }
-
-    pub fn contains_edge(&self, a: &A, b: &B) -> bool {
-        self.edges.contains(&(a.clone(), b.clone()))
-    }
-
-    pub fn neighbors_a(&self, cur_node: &A) -> Vec<B> {
-        self.edges
-            .iter()
-            .filter_map(|(a, b)| {
-                if *a == *cur_node {
-                    Some(b.clone())
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    pub fn neighbors_b<'a>(&'a self, cur_node: &'a B) -> impl Iterator<Item = A> + 'a {
-        self.edges.iter().filter_map(|(a, b)| {
-            if *b == *cur_node {
-                Some(a.clone())
-            } else {
-                None
-            }
-        })
-    }
-}
+use crate::{
+    bipartite_graph::BipartiteGraph,
+    philosophers::{CleanAndAnnotated, Philosopher},
+};
 
 #[derive(Debug)]
 pub enum PhilosopherSystemError<PhilosopherIdentifier> {
@@ -179,7 +104,7 @@ where
     }
 
     #[allow(dead_code)]
-    fn validate(&self) -> bool {
+    pub(crate) fn validate(&self) -> bool {
         let all_philo_ids: HashSet<PhilosopherIdentifier> = self
             .philosophers
             .iter()
@@ -199,11 +124,17 @@ where
         true
     }
 
+    /// the jobs that would be done with `given_contexts`
+    /// - if they have different philosophers, must commute (or at least the order doesn't matter at the very end)
+    /// - if they use disjoint resources (which implies different philosophers) they must even interleave as well
+    /// - if they have the same philosopher, then they will execute in the order provided
+    ///     both in the same threads
     #[allow(dead_code)]
-    fn run_system_fairly(
+    pub fn run_system_fairly(
         &mut self,
-        contexts_given: impl Iterator<Item = (PhilosopherIdentifier, Context)>,
-    ) where
+        given_contexts: impl Iterator<Item = (PhilosopherIdentifier, Context)>,
+    ) -> bool
+    where
         ResourceIdentifier: Send + 'static,
         PhilosopherIdentifier: Send + 'static,
         Context: Clone + Send + 'static,
@@ -214,12 +145,30 @@ where
     {
         let mut philos_before = vec![];
         core::mem::swap(&mut self.philosophers, &mut philos_before);
-        let philos_after = crate::philosophers::make_all_fair(
+        let (philos_after, all_finished) = crate::philosophers::make_all_fair(
             self.philosophers.len(),
             philos_before,
-            contexts_given,
+            given_contexts,
         );
         self.philosophers = philos_after;
+        all_finished
+    }
+
+    pub fn clear_backlog(&mut self) -> bool
+    where
+        ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
+        PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
+        Context: Clone + Send + 'static,
+        PhilosopherIdentifier: core::fmt::Display + core::fmt::Debug,
+        ResourceIdentifier: core::fmt::Debug,
+        Resources: core::fmt::Debug + Send + 'static,
+    {
+        let mut philos_before = vec![];
+        core::mem::swap(&mut self.philosophers, &mut philos_before);
+        let (philos_after, all_finished) =
+            crate::philosophers::just_clear_backlog(self.philosophers.len(), philos_before);
+        self.philosophers = philos_after;
+        all_finished
     }
 }
 
@@ -229,6 +178,7 @@ mod test {
     fn five_philosophers() {
         use super::{BipartiteGraph, PhilosopherSystem};
         use nonempty::NonEmpty;
+
         const PHILOSOPHER_NAMES: [&str; 5] = [
             "Baruch Spinoza",
             "Gilles Deleuze",

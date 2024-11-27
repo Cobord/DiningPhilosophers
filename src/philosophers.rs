@@ -600,7 +600,7 @@ where
 }
 
 /// the jobs that would be done with `given_contexts`
-/// - if they have different philosophers, must commute
+/// - if they have different philosophers, must commute (or at least the order doesn't matter at the very end)
 /// - if they use disjoint resources (which implies different philosophers) they must even interleave as well
 /// - if they have the same philosopher, then they will execute in the order provided
 ///     both in the same threads
@@ -608,7 +608,10 @@ pub(crate) fn make_all_fair<ResourceIdentifier, Resources, Context, PhilosopherI
     num_philosophers: usize,
     philosophers: Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>,
     given_contexts: impl Iterator<Item = (PhilosopherIdentifier, Context)>,
-) -> Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>
+) -> (
+    Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>,
+    bool,
+)
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
     PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
@@ -652,8 +655,45 @@ where
     for stopper in work_or_stop_signals {
         let _ = stopper.send(None);
     }
-    join_handles
+    let all_philos_now = join_handles
         .into_iter()
         .map(|jh| jh.join().expect("no problem joining"))
-        .collect::<Vec<_>>()
+        .collect::<Vec<_>>();
+    let all_finished = all_philos_now.iter().all(|p| p.context_queue.is_empty());
+    (all_philos_now, all_finished)
+}
+
+pub(crate) fn just_clear_backlog<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>(
+    num_philosophers: usize,
+    philosophers: Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>,
+) -> (
+    Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>,
+    bool,
+)
+where
+    ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
+    PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
+    Context: Clone + Send + 'static,
+    PhilosopherIdentifier: core::fmt::Display + core::fmt::Debug,
+    ResourceIdentifier: core::fmt::Debug,
+    Resources: core::fmt::Debug + Send + 'static,
+{
+    let mut philo_2_idx: HashMap<_, _> = HashMap::with_capacity(num_philosophers);
+    for (idx, philo) in philosophers.iter().enumerate() {
+        philo_2_idx.insert(philo.my_id.clone(), idx);
+    }
+    let mut join_handles = Vec::with_capacity(num_philosophers);
+    for mut philo in philosophers {
+        let jh = spawn(move || {
+            philo.just_clear_backlog(Duration::from_millis(50), Duration::from_millis(300));
+            philo
+        });
+        join_handles.push(jh);
+    }
+    let all_philos_now = join_handles
+        .into_iter()
+        .map(|jh| jh.join().expect("no problem joining"))
+        .collect::<Vec<_>>();
+    let all_finished = all_philos_now.iter().all(|p| p.context_queue.is_empty());
+    (all_philos_now, all_finished)
 }
