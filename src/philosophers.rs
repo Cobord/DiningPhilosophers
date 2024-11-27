@@ -5,8 +5,8 @@ use std::{
         mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
-    thread,
-    time::Duration,
+    thread::{sleep, spawn},
+    time::{Duration, Instant},
 };
 
 use nonempty::NonEmpty;
@@ -83,6 +83,30 @@ where
     job_count: Arc<Mutex<usize>>,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
+impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier> core::fmt::Debug
+    for Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
+where
+    ResourceIdentifier: Copy + Eq + Ord + Hash + core::fmt::Debug,
+    PhilosopherIdentifier: Clone + Eq + Hash + core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Philosopher")
+            .field("my_id", &self.my_id)
+            .field(
+                "holding",
+                &self
+                    .holding
+                    .iter()
+                    .map(|z| (z.identifier, z.is_clean))
+                    .collect::<Vec<_>>(),
+            )
+            .field("resources_needed", &self.resources_needed)
+            .field("context_queue length", &self.context_queue.len())
+            .finish()
+    }
+}
+
 impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
     Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
@@ -119,23 +143,16 @@ where
         }
     }
 
-    /// TODO:
-    fn dummy_job(&mut self) -> bool {
-        self.holding
-            .sort_by(|z1, z2| z1.identifier.cmp(&z2.identifier));
-        let have_all_needed = self.holding.len() == self.resource_sending.len()
-            && self
-                .holding
-                .iter()
-                .zip(self.resources_needed.iter())
-                .all(|(z, w)| z.identifier == *w);
-        if have_all_needed {
-            for cur_resource in &mut self.holding {
-                cur_resource.is_clean = false;
-                cur_resource.last_user = Some(self.my_id.clone());
-            }
+    pub fn view_needed(&self) -> &NonEmpty<ResourceIdentifier> {
+        &self.resources_needed
+    }
+
+    #[allow(dead_code)]
+    fn make_all_dirty(&mut self) {
+        for cur_resource in &mut self.holding {
+            cur_resource.is_clean = false;
+            cur_resource.last_user = Some(self.my_id.clone());
         }
-        have_all_needed
     }
 
     /// if we have all the `resources_needed` to do the `job`
@@ -147,7 +164,7 @@ where
     fn do_job(&mut self, ctx: Context) -> bool {
         self.holding
             .sort_by(|z1, z2| z1.identifier.cmp(&z2.identifier));
-        let have_all_needed = self.holding.len() == self.resource_sending.len()
+        let have_all_needed = self.holding.len() == self.resources_needed.len()
             && self
                 .holding
                 .iter()
@@ -215,7 +232,10 @@ where
     }
 
     /// send a request for a single resource that we need
-    fn send_single_request(&mut self, which_one: Option<ResourceIdentifier>) -> bool {
+    /// return
+    /// - whether a request should have gone out
+    /// - whether a request actually went out
+    fn send_single_request(&mut self, which_one: Option<ResourceIdentifier>) -> [bool; 2] {
         match which_one {
             None => {
                 // do for the first one we need but don't have
@@ -231,7 +251,7 @@ where
                 if let Some(first_needed) = first_needed {
                     self.send_single_request(Some(*first_needed))
                 } else {
-                    false
+                    [false, false]
                 }
             }
             Some(which_one) => {
@@ -240,12 +260,14 @@ where
                 // but if we do need it, we should have the channels to all the other `Philosopher`'s who
                 // can give it to us
                 if let Some(where_to_send_requests) = self.request_sending.get(&which_one) {
+                    let mut a_request_flew_off = false;
                     for cur_send_request in where_to_send_requests {
-                        let _ = cur_send_request.send((self.my_id.clone(), which_one));
+                        let flew_off = cur_send_request.send((self.my_id.clone(), which_one));
+                        a_request_flew_off |= flew_off.is_ok();
                     }
-                    true
+                    [true, a_request_flew_off]
                 } else {
-                    false
+                    [false, false]
                 }
             }
         }
@@ -313,8 +335,8 @@ where
         let mut j = self.job_count.lock().expect("lock fine");
         *j += 1;
         drop(j);
-        while self.send_single_request(None) {
-            self.receive_resource(quick_timeout);
+        while self.send_single_request(None)[1] {
+            let _did_receive_something = self.receive_resource(quick_timeout);
         }
         while let Some(backlog_ctx) = self.context_queue.pop_front() {
             let did_job = self.do_job(backlog_ctx.clone());
@@ -337,8 +359,8 @@ where
     where
         Context: Clone,
     {
-        while self.send_single_request(None) {
-            self.receive_resource(quick_timeout);
+        while self.send_single_request(None)[1] {
+            let _did_receive_something = self.receive_resource(quick_timeout);
         }
         while let Some(backlog_ctx) = self.context_queue.pop_front() {
             let did_job = self.do_job(backlog_ctx.clone());
@@ -381,8 +403,14 @@ where
         Resources: core::fmt::Debug,
     {
         let mut est_time_used = Duration::from_millis(0);
+        let start_time = Instant::now();
         #[allow(unused_assignments)]
         while est_time_used < full_timeout {
+            let elapsed = start_time.elapsed();
+            if elapsed > 5 * full_timeout {
+                break;
+            }
+            println!("{:?} just did elapsed check", self.my_id);
             let j = self.job_count.lock().expect("lock fine");
             println!(
                 "{} has {:?} and there are {} among everyone",
@@ -395,21 +423,25 @@ where
             }
             if *j == self.context_queue.len() {
                 drop(j);
+                println!("{:?} is going to be selfish", self.my_id);
                 self.be_selfish_helper(quick_timeout);
                 break;
             }
             drop(j);
+            println!("{:?} has released lock", self.my_id);
             if self.context_queue.is_empty() {
+                println!("{:?} is going to be selfless", self.my_id);
                 self.be_selfless_helper(quick_timeout);
                 break;
             }
-            let mut sent_a_request = self.send_single_request(None);
+            #[allow(unused_variables)]
+            let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
             let mut rcvd_resource = true;
             while rcvd_resource {
                 rcvd_resource = self.receive_resource(quick_timeout);
                 est_time_used += quick_timeout;
-                if sent_a_request {
-                    sent_a_request = self.send_single_request(None);
+                if had_request_to_send {
+                    [had_request_to_send, sent_a_request] = self.send_single_request(None);
                 }
                 if rcvd_resource {
                     println!("got something {}", self.my_id);
@@ -417,9 +449,6 @@ where
             }
             rcvd_resource = self.receive_resource(quick_timeout);
             est_time_used += quick_timeout;
-            if self.context_queue.is_empty() {
-                let _ = self.dummy_job();
-            }
             while let Some(ctx) = self.context_queue.pop_front() {
                 let did_job = self.do_job(ctx.clone());
                 if did_job {
@@ -436,7 +465,7 @@ where
                 est_time_used += quick_timeout;
                 process_more = req_rcv && self.holding.iter().any(|z| !z.is_clean);
                 if gave_it_up {
-                    println!("sent something {}", self.my_id);
+                    println!("{} sent something", self.my_id);
                 }
             }
             let j = self.job_count.lock().expect("lock fine");
@@ -446,7 +475,7 @@ where
             }
             drop(j);
             println!(
-                "either have more to do myself or more to offer {}",
+                "{} either have more to do myself or more to offer",
                 self.my_id
             );
         }
@@ -469,12 +498,13 @@ where
         loop {
             #[allow(clippy::if_not_else)]
             if !self.context_queue.is_empty() {
-                let mut sent_a_request = self.send_single_request(None);
+                #[allow(unused_variables)]
+                let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
                 let mut rcvd_resource = true;
                 while rcvd_resource {
                     rcvd_resource = self.receive_resource(quick_timeout);
-                    if sent_a_request {
-                        sent_a_request = self.send_single_request(None);
+                    if had_request_to_send {
+                        [had_request_to_send, sent_a_request] = self.send_single_request(None);
                     }
                 }
                 rcvd_resource = self.receive_resource(quick_timeout);
@@ -505,7 +535,7 @@ where
                     // to it's maximum value
                     // that way in `just_clear_backlog` we can be sure that if it reaches 0
                     // it is safe to stop and we don't have to be selfless anymore
-                    thread::sleep(quick_timeout);
+                    sleep(quick_timeout);
                     self.just_clear_backlog(quick_timeout, full_timeout);
                     break;
                 }
@@ -544,12 +574,12 @@ where
         let (stopper_send, stopper) = mpsc::channel();
         stoppers.push(stopper_send);
         let jh = if idx == which_selfish {
-            thread::spawn(move || {
+            spawn(move || {
                 philo.be_selfish(selfish_ctx_clone, Duration::from_millis(10));
                 philo
             })
         } else {
-            thread::spawn(move || {
+            spawn(move || {
                 philo.be_selfless(Duration::from_millis(50), stopper);
                 philo
             })
@@ -597,7 +627,7 @@ where
     for mut philo in philosophers {
         let (work_or_stop_send, work_or_stop) = mpsc::channel();
         work_or_stop_signals.push(work_or_stop_send);
-        let jh = thread::spawn(move || {
+        let jh = spawn(move || {
             philo.be_fair(
                 Duration::from_millis(50),
                 Duration::from_millis(300),

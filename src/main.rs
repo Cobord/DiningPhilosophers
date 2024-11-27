@@ -1,5 +1,7 @@
+mod communication_setup;
 mod philosophers;
 mod util;
+
 use std::sync::{mpsc, Arc, Mutex};
 
 use log::info;
