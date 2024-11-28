@@ -1,11 +1,10 @@
 use std::hash::Hash;
 
-use nonempty::NonEmpty;
-
 use crate::{
     bipartite_graph::BipartiteGraph,
     communication_setup::{PhilosopherSystem, PhilosopherSystemError},
     dag_utils::{DAGImplementor, OnlyDAG},
+    philosophers::PhilosopherJob,
 };
 
 #[derive(Debug)]
@@ -14,12 +13,8 @@ pub enum DAGPhilosopherSystemError<PhilosopherIdentifier> {
 }
 
 #[allow(dead_code)]
-pub struct DAGPhilosopherSystem<
-    ResourceIdentifier,
-    Resources,
-    Context,
-    PhilosopherIdentifier,
-> where
+pub struct DAGPhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
+where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
@@ -28,12 +23,7 @@ pub struct DAGPhilosopherSystem<
 }
 
 impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
-    DAGPhilosopherSystem<
-        ResourceIdentifier,
-        Resources,
-        Context,
-        PhilosopherIdentifier,
-    >
+    DAGPhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Ord + Hash,
@@ -44,7 +34,7 @@ where
     #[allow(clippy::type_complexity)]
     pub fn new(
         philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
-        philo_jobs: Vec<fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>>,
+        philo_jobs: Vec<PhilosopherJob<Context, Resources>>,
         starting_resources: Vec<(ResourceIdentifier, Resources)>,
     ) -> Result<Self, DAGPhilosopherSystemError<PhilosopherIdentifier>> {
         let new_underlying =
@@ -97,7 +87,7 @@ mod test {
 
     #[test]
     fn five_philosophers() {
-        use super::DAGPhilosopherSystem;
+        use super::{DAGPhilosopherSystem, PhilosopherJob};
         use crate::bipartite_graph::BipartiteGraph;
         use nonempty::NonEmpty;
 
@@ -109,17 +99,15 @@ mod test {
             "Michel Foucault",
         ];
         const NUM_PHILOSOPHERS: usize = PHILOSOPHER_NAMES.len();
-        let same_job: fn(&str, NonEmpty<u16>) -> NonEmpty<u16> =
-            |cur_philosopher, mut resources: NonEmpty<_>| {
-                println!("{cur_philosopher} is eating");
-                println!("They used {:?}", [resources[0], resources[1]]);
-                resources[0] *= 2;
-                resources[1] *= 2;
-                resources
-            };
+        let same_job: PhilosopherJob<&str, u16> = |cur_philosopher, mut resources: NonEmpty<_>| {
+            println!("{cur_philosopher} is eating");
+            println!("They used {:?}", [resources[0], resources[1]]);
+            resources[0] *= 2;
+            resources[1] *= 2;
+            resources
+        };
         #[allow(clippy::type_complexity)]
-        let all_jobs: Vec<fn(&str, NonEmpty<u16>) -> NonEmpty<u16>> =
-            vec![same_job; NUM_PHILOSOPHERS];
+        let all_jobs: Vec<PhilosopherJob<&str, u16>> = vec![same_job; NUM_PHILOSOPHERS];
         let mut philo_rsc_graph: BipartiteGraph<&str, usize> = BipartiteGraph::new();
         for philo in PHILOSOPHER_NAMES {
             philo_rsc_graph.add_a(philo);
@@ -142,6 +130,7 @@ mod test {
 
         assert!(phil_system.validate());
         let all_finished = phil_system.run_system_fairly(5);
+        // no tasks have been put on so nothing to finish anyway
         assert!(all_finished);
     }
 }

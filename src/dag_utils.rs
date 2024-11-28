@@ -27,9 +27,7 @@ pub(crate) trait DAGImplementor<NodeId, NodeData>: seal::Sealed {
 
 impl<NodeData> DAGImplementor<OnlyDAGNode, NodeData> for OnlyDAG<NodeData> {
     fn new() -> Self {
-        Self {
-
-        }
+        Self {}
     }
 
     fn peel_front(&mut self) -> impl Iterator<Item = NodeData> {

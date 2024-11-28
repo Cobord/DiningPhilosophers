@@ -59,6 +59,9 @@ where
     }
 }
 
+pub type PhilosopherJob<Context, Resources> =
+    fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>;
+
 #[allow(dead_code)]
 pub struct Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
@@ -68,7 +71,7 @@ where
     pub(crate) my_id: PhilosopherIdentifier,
     pub(crate) holding:
         Vec<CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>>,
-    job: fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>,
+    job: PhilosopherJob<Context, Resources>,
     resource_sending: HashMap<
         PhilosopherIdentifier,
         Sender<CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>>,
@@ -119,7 +122,7 @@ where
         mut starting_resources: Vec<
             CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>,
         >,
-        job: fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>,
+        job: PhilosopherJob<Context, Resources>,
         mut resources_needed: NonEmpty<ResourceIdentifier>,
         resource_receiving: Receiver<
             CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>,
