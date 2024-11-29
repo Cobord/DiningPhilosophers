@@ -1,5 +1,5 @@
 [package]
-name = "DiningPhilosophers"
+name = "dining_philosophers"
 version = "0.1.0"
 edition = "2021"
 

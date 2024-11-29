@@ -163,8 +163,9 @@ where
     /// we get back the possibly mutated `Resources`
     /// put them back into `holding`, but now as dirty so we will give them
     /// up if requested rather than hogging them for only our jobs
-    /// return if we actually had everything needed to do the job (which also means we did the job)
-    fn do_job(&mut self, ctx: Context) -> bool {
+    /// return None if we actually had everything needed to do the job (which also means we did the job)
+    /// otherwise give the context back to put it into backlog
+    fn do_job(&mut self, ctx: Context) -> Option<Context> {
         self.holding
             .sort_by(|z1, z2| z1.identifier.cmp(&z2.identifier));
         let have_all_needed = self.holding.len() == self.resources_needed.len()
@@ -194,8 +195,10 @@ where
                 annotated_resource.last_user = Some(self.my_id.clone());
                 self.holding.push(annotated_resource);
             }
+            None
+        } else {
+            Some(ctx)
         }
-        have_all_needed
     }
 
     /// listen for the requests from other `Philosopher`'s for resources
@@ -331,10 +334,7 @@ where
         }
     }
 
-    fn be_selfish(&mut self, ctx: Context, quick_timeout: Duration) -> bool
-    where
-        Context: Clone,
-    {
+    fn be_selfish(&mut self, ctx: Context, quick_timeout: Duration) -> bool {
         let mut j = self.job_count.lock().expect("lock fine");
         *j += 1;
         drop(j);
@@ -342,32 +342,29 @@ where
             let _did_receive_something = self.receive_resource(quick_timeout);
         }
         while let Some(backlog_ctx) = self.context_queue.pop_front() {
-            let did_job = self.do_job(backlog_ctx.clone());
-            if !did_job {
+            let did_job = self.do_job(backlog_ctx);
+            if let Some(backlog_ctx) = did_job {
                 self.context_queue.push_front(backlog_ctx);
                 self.context_queue.push_back(ctx);
                 return false;
             }
         }
-        let did_last_job = self.do_job(ctx.clone());
-        if did_last_job {
-            true
-        } else {
+        let did_last_job = self.do_job(ctx);
+        if let Some(ctx) = did_last_job {
             self.context_queue.push_back(ctx);
             false
+        } else {
+            true
         }
     }
 
-    fn be_selfish_helper(&mut self, quick_timeout: Duration)
-    where
-        Context: Clone,
-    {
+    fn be_selfish_helper(&mut self, quick_timeout: Duration) {
         while self.send_single_request(None)[1] {
             let _did_receive_something = self.receive_resource(quick_timeout);
         }
         while let Some(backlog_ctx) = self.context_queue.pop_front() {
-            let did_job = self.do_job(backlog_ctx.clone());
-            if !did_job {
+            let did_job = self.do_job(backlog_ctx);
+            if let Some(backlog_ctx) = did_job {
                 self.context_queue.push_front(backlog_ctx);
                 break;
             }
@@ -400,7 +397,6 @@ where
     #[allow(dead_code, clippy::needless_pass_by_value)]
     fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration)
     where
-        Context: Clone,
         PhilosopherIdentifier: core::fmt::Display + core::fmt::Debug,
         ResourceIdentifier: core::fmt::Debug,
         Resources: core::fmt::Debug,
@@ -453,13 +449,12 @@ where
             rcvd_resource = self.receive_resource(quick_timeout);
             est_time_used += quick_timeout;
             while let Some(ctx) = self.context_queue.pop_front() {
-                let did_job = self.do_job(ctx.clone());
-                if did_job {
-                    println!("one job down {}", self.my_id);
-                } else {
+                let did_job = self.do_job(ctx);
+                if let Some(ctx) = did_job {
                     self.context_queue.push_front(ctx);
                     break;
                 }
+                println!("one job down {}", self.my_id);
             }
             println!("helping others clear their backlogs, {}", self.my_id);
             let mut process_more = self.holding.iter().any(|z| !z.is_clean);
@@ -492,7 +487,6 @@ where
         full_timeout: Duration,
         context_or_stop: Receiver<Option<Context>>,
     ) where
-        Context: Clone,
         PhilosopherIdentifier: core::fmt::Debug + core::fmt::Display,
         ResourceIdentifier: core::fmt::Debug,
         Resources: core::fmt::Debug,
@@ -525,8 +519,8 @@ where
                     drop(j);
                     self.context_queue.push_back(ctx);
                     if let Some(ctx) = self.context_queue.pop_front() {
-                        let did_job = self.do_job(ctx.clone());
-                        if !did_job {
+                        let did_job = self.do_job(ctx);
+                        if let Some(ctx) = did_job {
                             self.context_queue.push_front(ctx);
                         }
                     }
@@ -558,6 +552,7 @@ where
 /// and providing them in return, doing no work or using those resources themselves
 /// we don't know who has the resources for the work to be done among all of `philosophers`
 /// so they do so with the request, response mechanism
+#[allow(dead_code)]
 pub(crate) fn make_one_selfish<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>(
     which_selfish: usize,
     num_philosophers: usize,
@@ -618,7 +613,7 @@ pub(crate) fn make_all_fair<ResourceIdentifier, Resources, Context, PhilosopherI
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
     PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
-    Context: Clone + Send + 'static,
+    Context: Send + 'static,
     Resources: Send + 'static,
     PhilosopherIdentifier: core::fmt::Debug + core::fmt::Display,
     ResourceIdentifier: core::fmt::Debug,
@@ -676,7 +671,7 @@ pub(crate) fn just_clear_backlog<ResourceIdentifier, Resources, Context, Philoso
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
     PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
-    Context: Clone + Send + 'static,
+    Context: Send + 'static,
     PhilosopherIdentifier: core::fmt::Display + core::fmt::Debug,
     ResourceIdentifier: core::fmt::Debug,
     Resources: core::fmt::Debug + Send + 'static,

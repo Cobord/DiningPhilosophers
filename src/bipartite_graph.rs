@@ -9,13 +9,8 @@ pub struct BipartiteGraph<A, B> {
     edges: HashSet<(A, B)>,
 }
 
-impl<A, B> BipartiteGraph<A, B>
-where
-    A: Clone + Eq + Hash,
-    B: Clone + Eq + Hash,
-{
-    #[allow(dead_code)]
-    pub fn new() -> Self {
+impl<A, B> Default for BipartiteGraph<A, B> {
+    fn default() -> Self {
         Self {
             num_a_nodes: 0,
             all_a_nodes: HashSet::new(),
@@ -23,6 +18,17 @@ where
             all_b_nodes: HashSet::new(),
             edges: HashSet::new(),
         }
+    }
+}
+
+impl<A, B> BipartiteGraph<A, B>
+where
+    A: Clone + Eq + Hash,
+    B: Clone + Eq + Hash,
+{
+    #[allow(dead_code)]
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn add_a(&mut self, new_a: A) {

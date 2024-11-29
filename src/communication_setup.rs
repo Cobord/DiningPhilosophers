@@ -34,7 +34,15 @@ where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Ord + Hash,
 {
-    #[allow(dead_code)]
+    /// create a new dining philosopher system where the resources needed by each philosopher
+    /// is given via a `BipartiteGraph`
+    /// each philosopher has an associated `PhilosopherJob`
+    /// and there is `starting_resources` which are distributed amongst them so they can do
+    /// those jobs
+    /// # Errors
+    /// TODO
+    /// # Panics
+    /// TODO
     #[allow(clippy::type_complexity)]
     pub fn new(
         philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
@@ -154,7 +162,7 @@ where
     where
         ResourceIdentifier: Send + 'static,
         PhilosopherIdentifier: Send + 'static,
-        Context: Clone + Send + 'static,
+        Context: Send + 'static,
         Resources: Send + 'static,
         PhilosopherIdentifier: core::fmt::Debug + core::fmt::Display,
         ResourceIdentifier: core::fmt::Debug,
@@ -175,7 +183,7 @@ where
     where
         ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
         PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
-        Context: Clone + Send + 'static,
+        Context: Send + 'static,
         PhilosopherIdentifier: core::fmt::Display + core::fmt::Debug,
         ResourceIdentifier: core::fmt::Debug,
         Resources: core::fmt::Debug + Send + 'static,

@@ -30,6 +30,18 @@ where
     Resources: 'static,
     Context: 'static,
 {
+    /// create a new dining philosopher system where the resources needed by each philosopher
+    /// is given via a `BipartiteGraph`
+    /// each philosopher has an associated `PhilosopherJob`
+    /// and there is `starting_resources` which are distributed amongst them so they can do
+    /// those jobs
+    /// ready to feed in the jobs as an `OnlyDAG` which gives which philosopher and `Context`
+    /// so they can do those jobs as soon as they acquire the needed `Resources`
+    /// how they are fed to the system ensures that the order is maintained
+    /// # Errors
+    /// TODO
+    /// # Panics
+    /// TODO
     #[allow(dead_code)]
     #[allow(clippy::type_complexity)]
     pub fn new(
@@ -61,7 +73,7 @@ where
     where
         ResourceIdentifier: Send + 'static,
         PhilosopherIdentifier: Send + 'static,
-        Context: Clone + Send + 'static,
+        Context: Send + 'static,
         Resources: Send + 'static,
         PhilosopherIdentifier: core::fmt::Debug + core::fmt::Display,
         ResourceIdentifier: core::fmt::Debug,
