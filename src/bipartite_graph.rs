@@ -76,4 +76,11 @@ where
             }
         })
     }
+
+    pub fn num_nonisolated_b_nodes(&self) -> usize {
+        self.all_b_nodes
+            .iter()
+            .filter(|&b| self.neighbors_b(b).next().is_some())
+            .count()
+    }
 }

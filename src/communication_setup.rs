@@ -13,6 +13,9 @@ use crate::{
 #[derive(Debug)]
 pub enum PhilosopherSystemError<PhilosopherIdentifier> {
     PhilosopherWithNothingNeeded(PhilosopherIdentifier),
+    #[allow(dead_code)]
+    MismatchPhilosophersAndJob(usize, usize),
+    NotAllNeededResourcesAtStart,
 }
 
 #[allow(dead_code)]
@@ -39,6 +42,12 @@ where
         starting_resources: Vec<(ResourceIdentifier, Resources)>,
     ) -> Result<Self, PhilosopherSystemError<PhilosopherIdentifier>> {
         let num_philos = philo_rsc_graph.num_a_nodes;
+        if philo_jobs.len() != num_philos {
+            return Err(PhilosopherSystemError::MismatchPhilosophersAndJob(
+                num_philos,
+                philo_jobs.len(),
+            ));
+        }
         let mut philosophers = Vec::with_capacity(num_philos);
         let mut resource_senders = Vec::with_capacity(num_philos);
         let mut request_senders = Vec::with_capacity(num_philos);
@@ -89,13 +98,21 @@ where
                 }
             }
         }
+        let mut count_resources_assigned = 0;
         for (cur_rsc_id, cur_resource) in starting_resources {
             let who_wants_it = philo_rsc_graph.neighbors_b(&cur_rsc_id);
             if let Some(who_gets_it) = who_wants_it.into_iter().min() {
                 let idx_who_gets_it = philo_2_idx.get(&who_gets_it).expect("in map").to_owned();
-                philosophers[idx_who_gets_it]
-                    .get_resource_not_peer(CleanAndAnnotated::new(cur_resource, cur_rsc_id));
+                let rcvd = philosophers[idx_who_gets_it]
+                    .get_resource_not_peer(CleanAndAnnotated::new(cur_resource, cur_rsc_id))
+                    .is_none();
+                debug_assert!(rcvd, "they did not actually need it but they were a neighbor in the graph so they should have");
+                count_resources_assigned += 1;
             }
+        }
+        let count_resources_needed_by_someone = philo_rsc_graph.num_nonisolated_b_nodes();
+        if count_resources_assigned != count_resources_needed_by_someone {
+            return Err(PhilosopherSystemError::NotAllNeededResourcesAtStart);
         }
         Ok(Self {
             philo_rsc_graph,
