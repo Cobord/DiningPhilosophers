@@ -14,8 +14,6 @@ use rand::Rng;
 
 type Resource = u16;
 
-// TODO: turn to test
-
 fn main() {
     const PHILOSOPHER_NAMES: [&str; 5] = [
         "Baruch Spinoza",

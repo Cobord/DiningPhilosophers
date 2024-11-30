@@ -37,12 +37,17 @@ where
     /// create a new dining philosopher system where the resources needed by each philosopher
     /// is given via a `BipartiteGraph`
     /// each philosopher has an associated `PhilosopherJob`
+    /// the jobs are given in order by `PhilosopherIdentifier`
     /// and there is `starting_resources` which are distributed amongst them so they can do
     /// those jobs
     /// # Errors
-    /// TODO
+    /// - each philosopher must have a nonzero number of resources that are involved in it's job
+    /// - there should be the same number of philosophers and jobs
+    /// - all `Resources` that are needed by anybody must be in the provided in `starting_resources`
     /// # Panics
-    /// TODO
+    /// the `HashMap` constructed has elements that are being accessed by construction
+    /// so the `get` will succeed, but the method itself does not know that it is only being called
+    /// with those values
     #[allow(clippy::type_complexity)]
     pub fn new(
         philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
@@ -63,7 +68,11 @@ where
             HashMap::with_capacity(num_philos);
         let job_counter = Arc::new(Mutex::new(0));
 
-        for (cur_philosopher, cur_job) in philo_rsc_graph.all_a_nodes.iter().zip(philo_jobs) {
+        for (cur_philosopher, cur_job) in philo_rsc_graph
+            .all_a_nodes_sorted()
+            .into_iter()
+            .zip(philo_jobs)
+        {
             let (cur_resource_send, cur_resource_rcv) = mpsc::channel();
             let (cur_request_send, cur_request_rcv) = mpsc::channel();
             let resources_needed = NonEmpty::from_vec(philo_rsc_graph.neighbors_a(cur_philosopher))
@@ -145,7 +154,7 @@ where
                 }
             }
         }
-        // TODO: ...
+        // TODO: other expected validity constraints
         true
     }
 

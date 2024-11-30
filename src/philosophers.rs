@@ -31,7 +31,7 @@ where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
-    /// TODO:
+    /// a `Resources` starts off as dirty and with no last user
     pub fn new(underlying: Resources, identifier: ResourceIdentifier) -> Self {
         Self {
             is_clean: false,
@@ -116,7 +116,14 @@ where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
-    /// TODO:
+    /// a `Philosopher` has
+    /// - a `PhilosopherIdentifier`
+    /// - some `starting_resources`
+    /// - a `PhilosopherJob` to execute when it gets a `Context` and access to `resources_needed`
+    /// - the `resources_needed` `ResourcesIdentifier`s to know what to request and receive
+    /// - channels for those sending requests for resources, receiving resources, receiving requesting for resources and sending resources
+    /// - a `job_count` which allows this to change behavior depending on the total number of jobs in the system that are not just on
+    ///     this `Philosopher` (in it's `context_queue` backlog)
     pub fn new(
         my_id: PhilosopherIdentifier,
         mut starting_resources: Vec<
@@ -393,7 +400,7 @@ where
         }
     }
 
-    // TODO:
+    // TODO: remove debugging
     #[allow(dead_code, clippy::needless_pass_by_value)]
     fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration)
     where
@@ -479,7 +486,7 @@ where
         }
     }
 
-    // TODO:
+    // TODO: remove debugging
     #[allow(dead_code, clippy::needless_pass_by_value)]
     fn be_fair(
         &mut self,
@@ -643,11 +650,15 @@ where
             .get(&who_to_do)
             .expect("this philosopher exists")]
         .send(Some(cur_ctx));
-        // TODO: what to do if sending work to a philosopher doesn't work
+        // CAUTION: what to do if sending work to a philosopher doesn't work
         // they are using `be_fair` so they should be listening on their `context_or_stop`
         // not ignoring it
-        if true {
+        #[allow(clippy::items_after_statements)]
+        const PANIC_IF_SEND_FAILS: bool = true;
+        if PANIC_IF_SEND_FAILS {
             let () = sent_work_2_philo.expect("sending work to a philosopher suceeds");
+        } else {
+            // that work just doesn't get done
         }
     }
     for stopper in work_or_stop_signals {

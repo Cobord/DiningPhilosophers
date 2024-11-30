@@ -39,9 +39,9 @@ where
     /// so they can do those jobs as soon as they acquire the needed `Resources`
     /// how they are fed to the system ensures that the order is maintained
     /// # Errors
-    /// TODO
+    /// - the errors from `PhilosopherSystem::new`
     /// # Panics
-    /// TODO
+    /// - the panics from `PhilosopherSystem::new`
     #[allow(dead_code)]
     #[allow(clippy::type_complexity)]
     pub fn new(

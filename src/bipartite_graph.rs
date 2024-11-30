@@ -83,6 +83,15 @@ where
         })
     }
 
+    pub fn all_a_nodes_sorted(&self) -> Vec<&A>
+    where
+        A: Ord,
+    {
+        let mut all_a_vec = self.all_a_nodes.iter().collect::<Vec<_>>();
+        all_a_vec.sort_unstable_by(|&a, &b| a.cmp(b));
+        all_a_vec
+    }
+
     pub fn num_nonisolated_b_nodes(&self) -> usize {
         self.all_b_nodes
             .iter()
