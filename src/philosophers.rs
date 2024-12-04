@@ -13,8 +13,8 @@ use nonempty::NonEmpty;
 
 use crate::util::nonempty_sort;
 
-const QUICK_TIMEOUT : Duration = Duration::from_millis(50);
-const FULL_TIMEOUT : Duration = Duration::from_millis(300);
+const QUICK_TIMEOUT: Duration = Duration::from_millis(50);
+const FULL_TIMEOUT: Duration = Duration::from_millis(300);
 
 #[allow(dead_code)]
 pub struct CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>
@@ -583,7 +583,7 @@ where
         stoppers.push(stopper_send);
         let jh = if idx == which_selfish {
             spawn(move || {
-                philo.be_selfish(selfish_ctx_clone, QUICK_TIMEOUT/5);
+                philo.be_selfish(selfish_ctx_clone, QUICK_TIMEOUT / 5);
                 philo
             })
         } else {
@@ -639,11 +639,7 @@ where
         let (work_or_stop_send, work_or_stop) = mpsc::channel();
         work_or_stop_signals.push(work_or_stop_send);
         let jh = spawn(move || {
-            philo.be_fair(
-                QUICK_TIMEOUT,
-                FULL_TIMEOUT,
-                work_or_stop,
-            );
+            philo.be_fair(QUICK_TIMEOUT, FULL_TIMEOUT, work_or_stop);
             philo
         });
         join_handles.push(jh);
