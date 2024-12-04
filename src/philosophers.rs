@@ -13,6 +13,9 @@ use nonempty::NonEmpty;
 
 use crate::util::nonempty_sort;
 
+const QUICK_TIMEOUT : Duration = Duration::from_millis(50);
+const FULL_TIMEOUT : Duration = Duration::from_millis(300);
+
 #[allow(dead_code)]
 pub struct CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>
 where
@@ -580,12 +583,12 @@ where
         stoppers.push(stopper_send);
         let jh = if idx == which_selfish {
             spawn(move || {
-                philo.be_selfish(selfish_ctx_clone, Duration::from_millis(10));
+                philo.be_selfish(selfish_ctx_clone, QUICK_TIMEOUT/5);
                 philo
             })
         } else {
             spawn(move || {
-                philo.be_selfless(Duration::from_millis(50), stopper);
+                philo.be_selfless(QUICK_TIMEOUT, stopper);
                 philo
             })
         };
@@ -637,8 +640,8 @@ where
         work_or_stop_signals.push(work_or_stop_send);
         let jh = spawn(move || {
             philo.be_fair(
-                Duration::from_millis(50),
-                Duration::from_millis(300),
+                QUICK_TIMEOUT,
+                FULL_TIMEOUT,
                 work_or_stop,
             );
             philo
@@ -694,7 +697,7 @@ where
     let mut join_handles = Vec::with_capacity(num_philosophers);
     for mut philo in philosophers {
         let jh = spawn(move || {
-            philo.just_clear_backlog(Duration::from_millis(50), Duration::from_millis(300));
+            philo.just_clear_backlog(QUICK_TIMEOUT, FULL_TIMEOUT);
             philo
         });
         join_handles.push(jh);
