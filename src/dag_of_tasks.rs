@@ -3,7 +3,7 @@ use std::hash::Hash;
 use crate::{
     bipartite_graph::BipartiteGraph,
     communication_setup::{PhilosopherSystem, PhilosopherSystemError},
-    dag_utils::{DAGImplementor, OnlyDAG},
+    dag_utils::{DAGImplementor, MyDAG},
     philosophers::PhilosopherJob,
 };
 
@@ -19,7 +19,7 @@ where
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
     philo_system: PhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>,
-    my_dag: OnlyDAG<(PhilosopherIdentifier, Context)>,
+    my_dag: MyDAG<(PhilosopherIdentifier, Context), ()>,
 }
 
 impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
@@ -48,13 +48,14 @@ where
         philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
         philo_jobs: Vec<PhilosopherJob<Context, Resources>>,
         starting_resources: Vec<(ResourceIdentifier, Resources)>,
+        dummy_node_data: fn(&(PhilosopherIdentifier, Context)) -> (PhilosopherIdentifier, Context),
     ) -> Result<Self, DAGPhilosopherSystemError<PhilosopherIdentifier>> {
         let new_underlying =
             PhilosopherSystem::new(philo_rsc_graph, philo_jobs, starting_resources)
                 .map_err(DAGPhilosopherSystemError::UnderlyingPhilosopherSystemError)?;
         Ok(Self {
             philo_system: new_underlying,
-            my_dag: OnlyDAG::new(),
+            my_dag: MyDAG::new(dummy_node_data),
         })
     }
 
@@ -64,8 +65,8 @@ where
     }
 
     #[allow(dead_code)]
-    pub fn chain_more_tasks(&mut self, more_tasks: OnlyDAG<(PhilosopherIdentifier, Context)>) {
-        self.my_dag.post_compose(more_tasks);
+    pub fn chain_more_tasks(&mut self, more_tasks: MyDAG<(PhilosopherIdentifier, Context), ()>) {
+        self.my_dag.post_compose(more_tasks, || {});
     }
 
     #[allow(dead_code)]
@@ -137,6 +138,7 @@ mod test {
             philo_rsc_graph,
             all_jobs,
             [3, 5, 7, 11, 13].into_iter().enumerate().collect(),
+            |_| ("", ""),
         )
         .expect("system construction succeeds");
 
