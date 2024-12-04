@@ -64,11 +64,19 @@ where
         self.philo_system.validate()
     }
 
+    /// put `more_tasks` into the DAG but all of them are after
+    /// all of the ones that are currently present in any topological sort
     #[allow(dead_code)]
     pub fn chain_more_tasks(&mut self, more_tasks: MyDAG<(PhilosopherIdentifier, Context), ()>) {
         self.my_dag.post_compose(more_tasks, || {});
     }
 
+    /// do `run_system_fairly` of `PhilosopherSystem` for each layer
+    /// because that one assumes an independence, but here there are dependencies
+    /// encoded by the edges of the DAG
+    /// if it failed to get everything done, then return false
+    /// in that cases, the philosophers will have some backlog and `my_dag` will still be nonempty
+    /// in the true return, the philosophers will have no backlog and `my_dag` will be empty
     #[allow(dead_code)]
     pub fn run_system_fairly(&mut self, max_tries_per_layer: usize) -> bool
     where
@@ -80,6 +88,15 @@ where
         ResourceIdentifier: core::fmt::Debug,
         Resources: core::fmt::Debug,
     {
+        let mut tries_on_initial_backlog = 1;
+        let mut all_finished = self.philo_system.clear_backlog();
+        while !all_finished && tries_on_initial_backlog < max_tries_per_layer {
+            all_finished = self.philo_system.clear_backlog();
+            tries_on_initial_backlog += 1;
+        }
+        if !all_finished {
+            return false;
+        }
         while !self.my_dag.is_empty() {
             let next_layer = self.my_dag.peel_front();
             let mut tries_this_layer = 1;
