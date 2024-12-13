@@ -39,7 +39,7 @@ where
     /// each philosopher has an associated `PhilosopherJob`
     /// the jobs are given in order by `PhilosopherIdentifier`
     /// and there is `starting_resources` which are distributed amongst them so they can do
-    /// those jobs
+    /// those jobs (those are assumed to have distinct `ResourceIdentifier`s)
     /// # Errors
     /// - each philosopher must have a nonzero number of resources that are involved in it's job
     /// - there should be the same number of philosophers and jobs
@@ -148,10 +148,15 @@ where
             return false;
         }
         for philo in &self.philosophers {
+            let mut count_needed = 0;
             for cur_needed in philo.view_needed() {
+                count_needed += 1;
                 if !self.philo_rsc_graph.contains_edge(&philo.my_id, cur_needed) {
                     return false;
                 }
+            }
+            if self.philo_rsc_graph.count_neighbors_a(&philo.my_id) != count_needed {
+                return false;
             }
         }
         // TODO: other expected validity constraints

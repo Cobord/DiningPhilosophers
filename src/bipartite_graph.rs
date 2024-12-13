@@ -27,6 +27,7 @@ where
     B: Clone + Eq + Hash,
 {
     #[allow(dead_code)]
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -73,6 +74,10 @@ where
             .collect()
     }
 
+    pub fn count_neighbors_a(&self, cur_node: &A) -> usize {
+        self.edges.iter().filter(|(a, _b)| *a == *cur_node).count()
+    }
+
     pub fn neighbors_b<'a>(&'a self, cur_node: &'a B) -> impl Iterator<Item = A> + 'a {
         self.edges.iter().filter_map(|(a, b)| {
             if *b == *cur_node {
@@ -83,6 +88,7 @@ where
         })
     }
 
+    #[must_use]
     pub fn all_a_nodes_sorted(&self) -> Vec<&A>
     where
         A: Ord,
@@ -92,6 +98,7 @@ where
         all_a_vec
     }
 
+    #[must_use]
     pub fn num_nonisolated_b_nodes(&self) -> usize {
         self.all_b_nodes
             .iter()

@@ -31,6 +31,18 @@ pub(crate) trait DAGImplementor<NodeId, NodeData, EdgeData>: seal::Sealed {
 
     #[allow(dead_code)]
     fn coproduct(&mut self, other: Self);
+
+    #[allow(dead_code)]
+    fn all_parallel(
+        dummy_node_data: fn(&NodeData) -> NodeData,
+        more_nodes: impl IntoIterator<Item = NodeData>,
+    ) -> Self;
+
+    #[allow(dead_code)]
+    fn all_sequantial(
+        dummy_node_data: fn(&NodeData) -> NodeData,
+        more_nodes: impl IntoIterator<Item = NodeData>,
+    ) -> Self;
 }
 
 impl<NodeData, EdgeData> DAGImplementor<MyDAGNode, NodeData, EdgeData>
@@ -88,6 +100,24 @@ impl<NodeData, EdgeData> DAGImplementor<MyDAGNode, NodeData, EdgeData>
 
     fn coproduct(&mut self, other: Self) {
         let _ = self.coproduct_helper(other);
+    }
+
+    fn all_parallel(
+        dummy_node_data: fn(&NodeData) -> NodeData,
+        more_nodes: impl IntoIterator<Item = NodeData>,
+    ) -> Self {
+        let mut to_return = Self::new(dummy_node_data);
+        for new_node in more_nodes {
+            to_return.underlying.add_node(new_node);
+        }
+        to_return
+    }
+
+    fn all_sequantial(
+        _dummy_node_data: fn(&NodeData) -> NodeData,
+        _more_nodes: impl IntoIterator<Item = NodeData>,
+    ) -> Self {
+        todo!("all sequential")
     }
 }
 

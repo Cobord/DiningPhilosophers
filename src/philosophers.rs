@@ -35,7 +35,7 @@ where
     PhilosopherIdentifier: Clone + Eq + Hash,
 {
     /// a `Resources` starts off as dirty and with no last user
-    pub fn new(underlying: Resources, identifier: ResourceIdentifier) -> Self {
+    pub(crate) fn new(underlying: Resources, identifier: ResourceIdentifier) -> Self {
         Self {
             is_clean: false,
             last_user: None,
@@ -127,7 +127,7 @@ where
     /// - channels for those sending requests for resources, receiving resources, receiving requesting for resources and sending resources
     /// - a `job_count` which allows this to change behavior depending on the total number of jobs in the system that are not just on
     ///     this `Philosopher` (in it's `context_queue` backlog)
-    pub fn new(
+    pub(crate) fn new(
         my_id: PhilosopherIdentifier,
         mut starting_resources: Vec<
             CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>,
@@ -309,7 +309,7 @@ where
     /// the other `Philosopher` `who`
     /// might send a request for a `Resources` from this `self`
     /// so put the `sender` that can send it to them into `resource_sending`
-    pub fn peer_will_request(
+    pub(crate) fn peer_will_request(
         &mut self,
         who: PhilosopherIdentifier,
         sender: Sender<CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>>,
@@ -321,7 +321,7 @@ where
     /// the `ResourceIdentifier` `what`
     /// so put it in `request_sending` so it can send the request
     /// to the other `Philosopher` which holds the corresponding `Receiver`
-    pub fn i_will_request(
+    pub(crate) fn i_will_request(
         &mut self,
         what: ResourceIdentifier,
         sender: Sender<(PhilosopherIdentifier, ResourceIdentifier)>,
@@ -332,7 +332,7 @@ where
         }
     }
 
-    pub fn get_resource_not_peer(
+    pub(crate) fn get_resource_not_peer(
         &mut self,
         resource: CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>,
     ) -> Option<CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>> {
@@ -403,14 +403,8 @@ where
         }
     }
 
-    // TODO: remove debugging
     #[allow(dead_code, clippy::needless_pass_by_value)]
-    fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration)
-    where
-        PhilosopherIdentifier: core::fmt::Display + core::fmt::Debug,
-        ResourceIdentifier: core::fmt::Debug,
-        Resources: core::fmt::Debug,
-    {
+    fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration) {
         let mut est_time_used = Duration::from_millis(0);
         let start_time = Instant::now();
         #[allow(unused_assignments)]
@@ -419,27 +413,18 @@ where
             if elapsed > 5 * full_timeout {
                 break;
             }
-            println!("{:?} just did elapsed check", self.my_id);
             let j = self.job_count.lock().expect("lock fine");
-            println!(
-                "{} has {:?} and there are {} among everyone",
-                self.my_id, self.holding, *j
-            );
             if *j == 0 {
                 drop(j);
-                println!("{} has stopped", self.my_id);
                 break;
             }
             if *j == self.context_queue.len() {
                 drop(j);
-                println!("{:?} is going to be selfish", self.my_id);
                 self.be_selfish_helper(quick_timeout);
                 break;
             }
             drop(j);
-            println!("{:?} has released lock", self.my_id);
             if self.context_queue.is_empty() {
-                println!("{:?} is going to be selfless", self.my_id);
                 self.be_selfless_helper(quick_timeout);
                 break;
             }
@@ -453,7 +438,7 @@ where
                     [had_request_to_send, sent_a_request] = self.send_single_request(None);
                 }
                 if rcvd_resource {
-                    println!("got something {}", self.my_id);
+                    // I got something, I'm going to try to receive more
                 }
             }
             rcvd_resource = self.receive_resource(quick_timeout);
@@ -464,43 +449,31 @@ where
                     self.context_queue.push_front(ctx);
                     break;
                 }
-                println!("one job down {}", self.my_id);
             }
-            println!("helping others clear their backlogs, {}", self.my_id);
             let mut process_more = self.holding.iter().any(|z| !z.is_clean);
             while process_more {
                 let [req_rcv, _had_it, gave_it_up] = self.process_request(quick_timeout);
                 est_time_used += quick_timeout;
                 process_more = req_rcv && self.holding.iter().any(|z| !z.is_clean);
                 if gave_it_up {
-                    println!("{} sent something", self.my_id);
+                    // I gave up a resource to someone requesting it
                 }
             }
             let j = self.job_count.lock().expect("lock fine");
             if *j == 0 {
-                println!("{} has stopped", self.my_id);
                 break;
             }
             drop(j);
-            println!(
-                "{} either have more to do myself or more to offer",
-                self.my_id
-            );
         }
     }
 
-    // TODO: remove debugging
     #[allow(dead_code, clippy::needless_pass_by_value)]
     fn be_fair(
         &mut self,
         quick_timeout: Duration,
         full_timeout: Duration,
         context_or_stop: Receiver<Option<Context>>,
-    ) where
-        PhilosopherIdentifier: core::fmt::Debug + core::fmt::Display,
-        ResourceIdentifier: core::fmt::Debug,
-        Resources: core::fmt::Debug,
-    {
+    ) {
         #[allow(unused_assignments)]
         loop {
             #[allow(clippy::if_not_else)]

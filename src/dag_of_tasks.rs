@@ -75,7 +75,7 @@ where
     /// because that one assumes an independence, but here there are dependencies
     /// encoded by the edges of the DAG
     /// if it failed to get everything done, then return false
-    /// in that cases, the philosophers will have some backlog and `my_dag` will still be nonempty
+    /// in that cases, the philosophers will have some backlog and/or `my_dag` will still be nonempty
     /// in the true return, the philosophers will have no backlog and `my_dag` will be empty
     #[allow(dead_code)]
     pub fn run_system_fairly(&mut self, max_tries_per_layer: usize) -> bool
@@ -119,6 +119,8 @@ mod test {
     fn five_philosophers() {
         use super::{DAGPhilosopherSystem, PhilosopherJob};
         use crate::bipartite_graph::BipartiteGraph;
+        use crate::dag_utils::{DAGImplementor, MyDAG};
+
         use nonempty::NonEmpty;
 
         const PHILOSOPHER_NAMES: [&str; 5] = [
@@ -160,6 +162,14 @@ mod test {
         .expect("system construction succeeds");
 
         assert!(phil_system.validate());
+        let all_finished = phil_system.run_system_fairly(5);
+        // no tasks have been put on so nothing to finish anyway
+        assert!(all_finished);
+
+        let more_tasks =
+            MyDAG::<(&str, &str), ()>::all_parallel(|z| *z, vec![("Karl Marx", "Karl Marx"); 5]);
+        phil_system.chain_more_tasks(more_tasks);
+
         let all_finished = phil_system.run_system_fairly(5);
         // no tasks have been put on so nothing to finish anyway
         assert!(all_finished);
