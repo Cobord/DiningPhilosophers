@@ -412,11 +412,7 @@ where
                 break;
             }
             let j = self.job_count.lock().expect("lock fine");
-            if *j == 0 {
-                drop(j);
-                break;
-            }
-            if *j == self.context_queue.len() {
+            if *j > 0 && *j == self.context_queue.len() {
                 drop(j);
                 self.be_selfish_helper(quick_timeout);
                 break;
@@ -525,6 +521,8 @@ where
                     // wait for all the others to get their last jobs
                     // and stabilize the `Arc<Mutex<usize>>` of `self.job_count`
                     // to it's maximum value
+                    // CAUTION: there is no guarantee that this amount of waiting is enough
+                    //      This is an assumption
                     // that way in `just_clear_backlog` we can be sure that if it reaches 0
                     // it is safe to stop and we don't have to be selfless anymore
                     sleep(quick_timeout);
