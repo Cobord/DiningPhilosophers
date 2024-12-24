@@ -1,6 +1,5 @@
 use std::{collections::HashSet, hash::Hash};
 
-#[allow(dead_code)]
 pub struct BipartiteGraph<A, B> {
     pub(crate) num_a_nodes: usize,
     pub(crate) all_a_nodes: HashSet<A>,

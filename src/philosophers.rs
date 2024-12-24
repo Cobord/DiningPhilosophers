@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, VecDeque},
     hash::Hash,
     sync::{
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc, Mutex,
     },
     thread::{sleep, spawn},
@@ -16,7 +16,6 @@ use crate::util::nonempty_sort;
 const QUICK_TIMEOUT: Duration = Duration::from_millis(50);
 const FULL_TIMEOUT: Duration = Duration::from_millis(300);
 
-#[allow(dead_code)]
 pub struct CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
@@ -65,7 +64,6 @@ where
 pub type PhilosopherJob<Context, Resources> =
     fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>;
 
-#[allow(dead_code)]
 pub struct Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
@@ -381,17 +379,19 @@ where
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn be_selfless(&mut self, quick_timeout: Duration, stopper: Receiver<()>) {
         loop {
             self.process_request(quick_timeout);
-            if let Ok(()) = stopper.recv_timeout(quick_timeout) {
-                break;
+            match stopper.recv_timeout(quick_timeout) {
+                Ok(()) | Err(RecvTimeoutError::Disconnected) => {
+                    drop(stopper);
+                    break;
+                }
+                Err(RecvTimeoutError::Timeout) => {}
             }
         }
     }
 
-    #[allow(clippy::needless_pass_by_value)]
     fn be_selfless_helper(&mut self, quick_timeout: Duration) {
         loop {
             self.process_request(quick_timeout);
@@ -403,11 +403,9 @@ where
         }
     }
 
-    #[allow(dead_code, clippy::needless_pass_by_value)]
     fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration) {
         let mut est_time_used = Duration::from_millis(0);
         let start_time = Instant::now();
-        #[allow(unused_assignments)]
         while est_time_used < full_timeout {
             let elapsed = start_time.elapsed();
             if elapsed > 5 * full_timeout {
@@ -428,20 +426,30 @@ where
                 self.be_selfless_helper(quick_timeout);
                 break;
             }
-            #[allow(unused_variables)]
             let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
+            let mut count_failed_send = u8::from(had_request_to_send && !sent_a_request);
             let mut rcvd_resource = true;
             while rcvd_resource {
                 rcvd_resource = self.receive_resource(quick_timeout);
                 est_time_used += quick_timeout;
-                if had_request_to_send {
+                if had_request_to_send && count_failed_send < 3 {
                     [had_request_to_send, sent_a_request] = self.send_single_request(None);
+                    if had_request_to_send && sent_a_request {
+                        count_failed_send = 0;
+                    } else if had_request_to_send {
+                        count_failed_send += 1;
+                    } else {
+                        count_failed_send = 0;
+                    }
                 }
                 if rcvd_resource {
                     // I got something, I'm going to try to receive more
+                    if est_time_used > full_timeout {
+                        break;
+                    }
                 }
             }
-            rcvd_resource = self.receive_resource(quick_timeout);
+            _ = self.receive_resource(quick_timeout);
             est_time_used += quick_timeout;
             while let Some(ctx) = self.context_queue.pop_front() {
                 let did_job = self.do_job(ctx);
@@ -452,11 +460,11 @@ where
             }
             let mut process_more = self.holding.iter().any(|z| !z.is_clean);
             while process_more {
-                let [req_rcv, _had_it, gave_it_up] = self.process_request(quick_timeout);
+                let [req_rcv, _had_it, _gave_it_up] = self.process_request(quick_timeout);
                 est_time_used += quick_timeout;
                 process_more = req_rcv && self.holding.iter().any(|z| !z.is_clean);
-                if gave_it_up {
-                    // I gave up a resource to someone requesting it
+                if est_time_used > full_timeout {
+                    break;
                 }
             }
             let j = self.job_count.lock().expect("lock fine");
@@ -467,32 +475,36 @@ where
         }
     }
 
-    #[allow(dead_code, clippy::needless_pass_by_value)]
     fn be_fair(
         &mut self,
         quick_timeout: Duration,
         full_timeout: Duration,
         context_or_stop: Receiver<Option<Context>>,
     ) {
-        #[allow(unused_assignments)]
         loop {
-            #[allow(clippy::if_not_else)]
-            if !self.context_queue.is_empty() {
-                #[allow(unused_variables)]
-                let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
+            if self.context_queue.is_empty() {
                 let mut rcvd_resource = true;
                 while rcvd_resource {
                     rcvd_resource = self.receive_resource(quick_timeout);
-                    if had_request_to_send {
+                }
+            } else {
+                let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
+                let mut count_failed_send = u8::from(had_request_to_send && !sent_a_request);
+                let mut rcvd_resource = true;
+                while rcvd_resource {
+                    rcvd_resource = self.receive_resource(quick_timeout);
+                    if had_request_to_send && count_failed_send < 3 {
                         [had_request_to_send, sent_a_request] = self.send_single_request(None);
+                        if had_request_to_send && sent_a_request {
+                            count_failed_send = 0;
+                        } else if had_request_to_send {
+                            count_failed_send += 1;
+                        } else {
+                            count_failed_send = 0;
+                        }
                     }
                 }
-                rcvd_resource = self.receive_resource(quick_timeout);
-            } else {
-                let mut rcvd_resource = true;
-                while rcvd_resource {
-                    rcvd_resource = self.receive_resource(quick_timeout);
-                }
+                _ = self.receive_resource(quick_timeout);
             }
             let ctx_rcv = context_or_stop.recv_timeout(quick_timeout);
             match ctx_rcv {
@@ -527,6 +539,7 @@ where
                 process_more = req_rcv && self.holding.iter().any(|z| !z.is_clean);
             }
         }
+        drop(context_or_stop);
     }
 }
 

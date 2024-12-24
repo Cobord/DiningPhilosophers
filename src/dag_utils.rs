@@ -39,7 +39,7 @@ pub(crate) trait DAGImplementor<NodeId, NodeData, EdgeData>: seal::Sealed {
     ) -> Self;
 
     #[allow(dead_code)]
-    fn all_sequantial(
+    fn all_sequential(
         dummy_node_data: fn(&NodeData) -> NodeData,
         more_nodes: impl IntoIterator<Item = NodeData>,
     ) -> Self;
@@ -113,7 +113,7 @@ impl<NodeData, EdgeData> DAGImplementor<MyDAGNode, NodeData, EdgeData>
         to_return
     }
 
-    fn all_sequantial(
+    fn all_sequential(
         _dummy_node_data: fn(&NodeData) -> NodeData,
         _more_nodes: impl IntoIterator<Item = NodeData>,
     ) -> Self {

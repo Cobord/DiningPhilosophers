@@ -18,7 +18,6 @@ pub enum PhilosopherSystemError<PhilosopherIdentifier> {
     NotAllNeededResourcesAtStart,
 }
 
-#[allow(dead_code)]
 pub struct PhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
@@ -48,7 +47,6 @@ where
     /// the `HashMap` constructed has elements that are being accessed by construction
     /// so the `get` will succeed, but the method itself does not know that it is only being called
     /// with those values
-    #[allow(clippy::type_complexity)]
     pub fn new(
         philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
         philo_jobs: Vec<PhilosopherJob<Context, Resources>>,
@@ -137,7 +135,6 @@ where
         })
     }
 
-    #[allow(dead_code)]
     pub(crate) fn validate(&self) -> bool {
         let all_philo_ids: HashSet<PhilosopherIdentifier> = self
             .philosophers
@@ -168,7 +165,6 @@ where
     /// - if they use disjoint resources (which implies different philosophers) they must even interleave as well
     /// - if they have the same philosopher, then they will execute in the order provided
     ///     both in the same threads
-    #[allow(dead_code)]
     pub fn run_system_fairly(
         &mut self,
         given_contexts: impl Iterator<Item = (PhilosopherIdentifier, Context)>,
@@ -233,7 +229,6 @@ mod test {
             resources[1] *= 2;
             resources
         };
-        #[allow(clippy::type_complexity)]
         let all_jobs: Vec<PhilosopherJob<&str, u16>> = vec![same_job; NUM_PHILOSOPHERS];
         let mut philo_rsc_graph: BipartiteGraph<&str, usize> = BipartiteGraph::new();
         for philo in PHILOSOPHER_NAMES {

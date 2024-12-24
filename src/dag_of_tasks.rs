@@ -12,7 +12,6 @@ pub enum DAGPhilosopherSystemError<PhilosopherIdentifier> {
     UnderlyingPhilosopherSystemError(PhilosopherSystemError<PhilosopherIdentifier>),
 }
 
-#[allow(dead_code)]
 pub struct DAGPhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
@@ -43,7 +42,6 @@ where
     /// # Panics
     /// - the panics from `PhilosopherSystem::new`
     #[allow(dead_code)]
-    #[allow(clippy::type_complexity)]
     pub fn new(
         philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
         philo_jobs: Vec<PhilosopherJob<Context, Resources>>,
@@ -138,7 +136,6 @@ mod test {
             resources[1] *= 2;
             resources
         };
-        #[allow(clippy::type_complexity)]
         let all_jobs: Vec<PhilosopherJob<&str, u16>> = vec![same_job; NUM_PHILOSOPHERS];
         let mut philo_rsc_graph: BipartiteGraph<&str, usize> = BipartiteGraph::new();
         for philo in PHILOSOPHER_NAMES {
