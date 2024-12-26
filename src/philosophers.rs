@@ -154,10 +154,18 @@ where
         }
     }
 
+    /// a view into `resources_needed`
+    /// don't make public because never want mutable access to this
     pub fn view_needed(&self) -> &NonEmpty<ResourceIdentifier> {
         &self.resources_needed
     }
 
+    /// have no backlog of contexts that still need to go through `self.job`
+    pub fn has_no_backlog(&self) -> bool {
+        self.context_queue.is_empty()
+    }
+
+    /// make all resources `self` is holding dirty so they will be given up when requested
     #[allow(dead_code)]
     fn make_all_dirty(&mut self) {
         for cur_resource in &mut self.holding {
@@ -342,6 +350,13 @@ where
         }
     }
 
+    /// attempt to grab all the resources I need
+    /// then do all the tasks in my backlog
+    /// if for some reason peers weren't giving it up
+    /// return false to say we didn't manage to finish everything
+    /// and puts `ctx` into the backlog too
+    /// then do `ctx` as the last thing
+    /// return true to say `ctx` was finished after all of the backlog
     fn be_selfish(&mut self, ctx: Context, quick_timeout: Duration) -> bool {
         let mut j = self.job_count.lock().expect("lock fine");
         *j += 1;
@@ -366,6 +381,13 @@ where
         }
     }
 
+    /// attempt to grab all the resources I need
+    /// then do all the tasks in my backlog
+    /// if there is any failure when trying to do a job
+    /// because not all resources are obtained etc,
+    /// then put the failed context back at the front of the backlog
+    /// the endstate is either a completely empty backlog in the happy path
+    /// or some backlog still left if some acquisition or job went wrong
     fn be_selfish_helper(&mut self, quick_timeout: Duration) {
         while self.send_single_request(None)[1] {
             let _did_receive_something = self.receive_resource(quick_timeout);
@@ -379,6 +401,8 @@ where
         }
     }
 
+    /// give up the resources am holding to anyone who requests them
+    /// when receive the signal to stop or that transmitter has disconnected, then stop
     fn be_selfless(&mut self, quick_timeout: Duration, stopper: Receiver<()>) {
         loop {
             self.process_request(quick_timeout);
@@ -392,6 +416,9 @@ where
         }
     }
 
+    /// give up the resources am holding to anyone who requests them
+    /// when there are no more jobs left in the system as measured by the mutex
+    /// then stop
     fn be_selfless_helper(&mut self, quick_timeout: Duration) {
         loop {
             self.process_request(quick_timeout);
@@ -403,6 +430,12 @@ where
         }
     }
 
+    /// only clear backlog
+    /// be selfish if we have the only jobs in the system
+    /// be selfless if we have none of the backlog
+    /// otherwise it is a combination of doing own jobs and responding to requests
+    /// can stop when the number of jobs in the system reaches 0
+    /// or with the `full_timeout`
     fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration) {
         let mut est_time_used = Duration::from_millis(0);
         let start_time = Instant::now();
@@ -471,6 +504,9 @@ where
         }
     }
 
+    /// a combination of selfishly doing own jobs and selflessly responding to requests
+    /// can wind down when receive a stop signal, then we can move to `just_clear_backlog` stage
+    /// new jobs received on `context_or_stop` go into our backlog
     fn be_fair(
         &mut self,
         quick_timeout: Duration,
@@ -655,6 +691,7 @@ where
     (all_philos_now, all_finished)
 }
 
+/// all the philosophers do `just_clear_backlog`
 pub(crate) fn just_clear_backlog<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>(
     num_philosophers: usize,
     philosophers: Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>,

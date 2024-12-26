@@ -4,7 +4,7 @@ use nonempty::NonEmpty;
 
 // copied from a PR on nonempty but not in release yet
 
-/// Sorts the nonempty.
+/// Sorts the nonempty
 pub(crate) fn nonempty_sort<T>(me: &mut NonEmpty<T>)
 where
     T: Ord,

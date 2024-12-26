@@ -73,10 +73,12 @@ where
         {
             let (cur_resource_send, cur_resource_rcv) = mpsc::channel();
             let (cur_request_send, cur_request_rcv) = mpsc::channel();
-            let resources_needed = NonEmpty::from_vec(philo_rsc_graph.neighbors_a(cur_philosopher))
-                .ok_or_else(|| {
-                    PhilosopherSystemError::PhilosopherWithNothingNeeded(cur_philosopher.clone())
-                })?;
+            let resources_needed = NonEmpty::from_vec(
+                (philo_rsc_graph.neighbors_a(cur_philosopher)).collect::<Vec<_>>(),
+            )
+            .ok_or_else(|| {
+                PhilosopherSystemError::PhilosopherWithNothingNeeded(cur_philosopher.clone())
+            })?;
             let philosopher = Philosopher::new(
                 cur_philosopher.clone(),
                 vec![],
@@ -189,6 +191,7 @@ where
         all_finished
     }
 
+    /// just clear the backlog of all the `Philosopher`s in the system
     pub fn clear_backlog(&mut self) -> bool
     where
         ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
@@ -198,6 +201,10 @@ where
         ResourceIdentifier: core::fmt::Debug,
         Resources: core::fmt::Debug + Send + 'static,
     {
+        let all_finished = self.philosophers.iter().all(Philosopher::has_no_backlog);
+        if all_finished {
+            return true;
+        }
         let mut philos_before = vec![];
         core::mem::swap(&mut self.philosophers, &mut philos_before);
         let (philos_after, all_finished) =
