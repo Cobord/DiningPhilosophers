@@ -2,6 +2,9 @@
 name = "dining_philosophers"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "Dining Philosophers problem with Chandy/Misra method"
+repository = "https://github.com/Cobord/DiningPhilosophers"
 
 [dependencies]
 rand = "^0.8.5"
