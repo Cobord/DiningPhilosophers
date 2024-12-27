@@ -61,8 +61,31 @@ where
     }
 }
 
+/*
+pub type PhilosopherJob<Context, Resources> =
+    Box<dyn Fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources> + Send + 'static>;
+*/
 pub type PhilosopherJob<Context, Resources> =
     fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>;
+
+#[allow(dead_code)]
+pub(crate) fn make_many_same_job<Context, Resources>(
+    f: fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>,
+    how_many: usize,
+) -> Vec<PhilosopherJob<Context, Resources>> {
+    let mut to_return = Vec::with_capacity(how_many);
+    for _ in 0..how_many {
+        to_return.push(f);
+    }
+    to_return
+}
+
+#[allow(dead_code)]
+pub(crate) fn make_one_job<Context, Resources>(
+    f: fn(Context, NonEmpty<Resources>) -> NonEmpty<Resources>,
+) -> PhilosopherJob<Context, Resources> {
+    f
+}
 
 pub struct Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where

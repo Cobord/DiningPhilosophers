@@ -9,7 +9,7 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use log::info;
 use nonempty::NonEmpty;
-use philosophers::{make_all_fair, make_one_selfish, CleanAndAnnotated, Philosopher};
+use philosophers::{make_all_fair, make_one_job, make_one_selfish, CleanAndAnnotated, Philosopher};
 use rand::Rng;
 
 type Resource = u16;
@@ -37,13 +37,13 @@ fn main() {
         let cur_philosopher = (*cur_philosopher).to_string();
         let (cur_resource_send, cur_resource_rcv) = mpsc::channel();
         let (cur_request_send, cur_request_rcv) = mpsc::channel();
-        let job = move |cur_philosopher, mut resources: NonEmpty<Resource>| {
+        let job = make_one_job(move |cur_philosopher, mut resources: NonEmpty<Resource>| {
             println!("{cur_philosopher} is eating");
             println!("They used {:?}", [resources[0], resources[1]]);
             resources[0] *= 2;
             resources[1] *= 2;
             resources
-        };
+        });
         let cur_fork = philo_id;
         let next_fork = (philo_id + 1) % NUM_PHILOSOPHERS;
         let philosopher = Philosopher::new(

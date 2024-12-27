@@ -115,9 +115,10 @@ mod test {
 
     #[test]
     fn five_philosophers() {
-        use super::{DAGPhilosopherSystem, PhilosopherJob};
+        use super::DAGPhilosopherSystem;
         use crate::bipartite_graph::BipartiteGraph;
         use crate::dag_utils::{DAGImplementor, MyDAG};
+        use crate::philosophers::{make_many_same_job, PhilosopherJob};
 
         use nonempty::NonEmpty;
 
@@ -129,14 +130,15 @@ mod test {
             "Michel Foucault",
         ];
         const NUM_PHILOSOPHERS: usize = PHILOSOPHER_NAMES.len();
-        let same_job: PhilosopherJob<&str, u16> = |cur_philosopher, mut resources: NonEmpty<_>| {
+        let same_job = |cur_philosopher, mut resources: NonEmpty<_>| {
             println!("{cur_philosopher} is eating");
             println!("They used {:?}", [resources[0], resources[1]]);
             resources[0] *= 2;
             resources[1] *= 2;
             resources
         };
-        let all_jobs: Vec<PhilosopherJob<&str, u16>> = vec![same_job; NUM_PHILOSOPHERS];
+        let all_jobs: Vec<PhilosopherJob<&str, u16>> =
+            make_many_same_job(same_job, NUM_PHILOSOPHERS);
         let mut philo_rsc_graph: BipartiteGraph<&str, usize> = BipartiteGraph::new();
         for philo in PHILOSOPHER_NAMES {
             philo_rsc_graph.add_a(philo);
