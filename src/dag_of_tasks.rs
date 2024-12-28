@@ -15,7 +15,7 @@ pub enum DAGPhilosopherSystemError<PhilosopherIdentifier> {
 pub struct DAGPhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
-    PhilosopherIdentifier: Clone + Eq + Hash,
+    PhilosopherIdentifier: Clone + Eq + Hash + core::fmt::Debug,
 {
     philo_system: PhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>,
     my_dag: MyDAG<(PhilosopherIdentifier, Context), ()>,
@@ -25,7 +25,7 @@ impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
     DAGPhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
-    PhilosopherIdentifier: Clone + Eq + Ord + Hash,
+    PhilosopherIdentifier: Clone + Eq + Ord + Hash + core::fmt::Debug,
     Resources: 'static,
     Context: 'static,
 {

@@ -13,8 +13,8 @@ use nonempty::NonEmpty;
 
 use crate::util::nonempty_sort;
 
-const QUICK_TIMEOUT: Duration = Duration::from_millis(50);
-const FULL_TIMEOUT: Duration = Duration::from_millis(300);
+const QUICK_TIMEOUT: Duration = Duration::from_millis(200);
+const FULL_TIMEOUT: Duration = Duration::from_millis(1_000);
 
 pub struct CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>
 where
@@ -90,7 +90,7 @@ pub(crate) fn make_one_job<Context, Resources>(
 pub struct Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
-    PhilosopherIdentifier: Clone + Eq + Hash,
+    PhilosopherIdentifier: Clone + Eq + Hash + core::fmt::Debug,
 {
     pub(crate) my_id: PhilosopherIdentifier,
     pub(crate) holding:
@@ -138,7 +138,7 @@ impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
     Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
-    PhilosopherIdentifier: Clone + Eq + Hash,
+    PhilosopherIdentifier: Clone + Eq + Hash + core::fmt::Debug,
 {
     /// a `Philosopher` has
     /// - a `PhilosopherIdentifier`
@@ -186,6 +186,11 @@ where
     /// have no backlog of contexts that still need to go through `self.job`
     pub fn has_no_backlog(&self) -> bool {
         self.context_queue.is_empty()
+    }
+
+    /// how many in backlog of contexts that still need to go through `self.job`
+    pub fn count_backlog(&self) -> usize {
+        self.context_queue.len()
     }
 
     /// make all resources `self` is holding dirty so they will be given up when requested
@@ -411,9 +416,13 @@ where
     /// then put the failed context back at the front of the backlog
     /// the endstate is either a completely empty backlog in the happy path
     /// or some backlog still left if some acquisition or job went wrong
-    fn be_selfish_helper(&mut self, quick_timeout: Duration) {
+    fn be_selfish_helper(&mut self, quick_timeout: Duration, full_timeout: Duration) {
+        let start_time = Instant::now();
         while self.send_single_request(None)[1] {
             let _did_receive_something = self.receive_resource(quick_timeout);
+            if start_time.elapsed() > full_timeout {
+                break;
+            }
         }
         while let Some(backlog_ctx) = self.context_queue.pop_front() {
             let did_job = self.do_job(backlog_ctx);
@@ -442,7 +451,8 @@ where
     /// give up the resources am holding to anyone who requests them
     /// when there are no more jobs left in the system as measured by the mutex
     /// then stop
-    fn be_selfless_helper(&mut self, quick_timeout: Duration) {
+    fn be_selfless_helper(&mut self, quick_timeout: Duration, full_timeout: Duration) {
+        let start_time = Instant::now();
         loop {
             self.process_request(quick_timeout);
             let j = self.job_count.lock().expect("lock fine");
@@ -450,6 +460,9 @@ where
                 break;
             }
             drop(j);
+            if start_time.elapsed() > full_timeout {
+                break;
+            }
         }
     }
 
@@ -469,13 +482,15 @@ where
             }
             let j = self.job_count.lock().expect("lock fine");
             if *j > 0 && *j == self.context_queue.len() {
+                //println!("{:?} is going to be selfish", self.my_id);
                 drop(j);
-                self.be_selfish_helper(quick_timeout);
+                self.be_selfish_helper(quick_timeout, full_timeout);
                 break;
             }
             drop(j);
             if self.context_queue.is_empty() {
-                self.be_selfless_helper(quick_timeout);
+                //println!("{:?} is going to be selfless", self.my_id);
+                self.be_selfless_helper(quick_timeout, full_timeout);
                 break;
             }
             let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
@@ -584,7 +599,7 @@ where
                     //      This is an assumption
                     // that way in `just_clear_backlog` we can be sure that if it reaches 0
                     // it is safe to stop and we don't have to be selfless anymore
-                    sleep(quick_timeout);
+                    sleep(full_timeout);
                     self.just_clear_backlog(quick_timeout, full_timeout);
                     break;
                 }
@@ -614,7 +629,7 @@ pub(crate) fn make_one_selfish<ResourceIdentifier, Resources, Context, Philosoph
 ) -> Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash + Send + 'static,
-    PhilosopherIdentifier: Clone + Eq + Hash + Send + 'static,
+    PhilosopherIdentifier: Clone + Eq + Hash + core::fmt::Debug + Send + 'static,
     Context: Clone + Send + 'static,
     Resources: Send + 'static,
 {
@@ -673,8 +688,11 @@ where
     Resources: core::fmt::Debug,
 {
     let mut philo_2_idx: HashMap<_, _> = HashMap::with_capacity(num_philosophers);
+    #[allow(unused_variables)]
+    let mut how_many_contexts_already = 0;
     for (idx, philo) in philosophers.iter().enumerate() {
         philo_2_idx.insert(philo.my_id.clone(), idx);
+        how_many_contexts_already += philo.context_queue.len();
     }
     let mut join_handles = Vec::with_capacity(num_philosophers);
     let mut work_or_stop_signals = Vec::with_capacity(num_philosophers);
@@ -687,7 +705,11 @@ where
         });
         join_handles.push(jh);
     }
+    #[allow(unused_variables)]
+    let mut how_many_sent_now = 0u8;
+    #[allow(clippy::explicit_counter_loop)]
     for (who_to_do, cur_ctx) in given_contexts {
+        how_many_sent_now += 1;
         let sent_work_2_philo = work_or_stop_signals[*philo_2_idx
             .get(&who_to_do)
             .expect("this philosopher exists")]

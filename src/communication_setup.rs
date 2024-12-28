@@ -21,7 +21,7 @@ pub enum PhilosopherSystemError<PhilosopherIdentifier> {
 pub struct PhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
-    PhilosopherIdentifier: Clone + Eq + Hash,
+    PhilosopherIdentifier: Clone + Eq + Hash + core::fmt::Debug,
 {
     philo_rsc_graph: BipartiteGraph<PhilosopherIdentifier, ResourceIdentifier>,
     philosophers: Vec<Philosopher<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>>,
@@ -31,7 +31,7 @@ impl<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
     PhilosopherSystem<ResourceIdentifier, Resources, Context, PhilosopherIdentifier>
 where
     ResourceIdentifier: Copy + Eq + Ord + Hash,
-    PhilosopherIdentifier: Clone + Eq + Ord + Hash,
+    PhilosopherIdentifier: Clone + Eq + Ord + Hash + core::fmt::Debug,
 {
     /// create a new dining philosopher system where the resources needed by each philosopher
     /// is given via a `BipartiteGraph`
@@ -160,6 +160,13 @@ where
         }
         // TODO: other expected validity constraints
         true
+    }
+
+    pub fn how_many_backlog(&self) -> usize {
+        self.philosophers
+            .iter()
+            .map(Philosopher::count_backlog)
+            .sum()
     }
 
     /// the jobs that would be done with `given_contexts`
