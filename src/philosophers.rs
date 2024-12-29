@@ -13,8 +13,8 @@ use nonempty::NonEmpty;
 
 use crate::util::nonempty_sort;
 
-const QUICK_TIMEOUT: Duration = Duration::from_millis(200);
-const FULL_TIMEOUT: Duration = Duration::from_millis(1_000);
+const QUICK_TIMEOUT: Duration = Duration::from_millis(20);
+const FULL_TIMEOUT: Duration = Duration::from_millis(100);
 
 pub struct CleanAndAnnotated<ResourceIdentifier, Resources, PhilosopherIdentifier>
 where
@@ -731,6 +731,7 @@ where
             // that work just doesn't get done
         }
     }
+    sleep(FULL_TIMEOUT);
     for stopper in work_or_stop_signals {
         let _ = stopper.send(None);
     }
@@ -770,6 +771,7 @@ where
         });
         join_handles.push(jh);
     }
+    sleep(FULL_TIMEOUT);
     let all_philos_now = join_handles
         .into_iter()
         .map(|jh| jh.join().expect("no problem joining"))
