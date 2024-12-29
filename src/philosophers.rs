@@ -417,16 +417,18 @@ where
     /// the endstate is either a completely empty backlog in the happy path
     /// or some backlog still left if some acquisition or job went wrong
     fn be_selfish_helper(&mut self, quick_timeout: Duration, full_timeout: Duration) {
-        let start_time = Instant::now();
+        let mut est_time_used = Duration::from_secs(0);
         while self.send_single_request(None)[1] {
             let mut did_receive_something = self.receive_resource(quick_timeout);
+            est_time_used += quick_timeout;
             while !did_receive_something {
                 did_receive_something = self.receive_resource(quick_timeout);
-                if start_time.elapsed() > full_timeout {
+                est_time_used += quick_timeout;
+                if est_time_used > full_timeout {
                     break;
                 }
             }
-            if start_time.elapsed() > 10 * full_timeout {
+            if est_time_used > 10 * full_timeout {
                 break;
             }
         }
@@ -458,15 +460,17 @@ where
     /// when there are no more jobs left in the system as measured by the mutex
     /// then stop
     fn be_selfless_helper(&mut self, quick_timeout: Duration, full_timeout: Duration) {
-        let start_time = Instant::now();
+        let mut est_time_used = Duration::from_secs(0);
         loop {
             self.process_request(quick_timeout);
+            est_time_used += quick_timeout;
             let j = self.job_count.lock().expect("lock fine");
             if *j == 0 {
                 break;
             }
             drop(j);
-            if start_time.elapsed() > full_timeout {
+            if est_time_used > 20 * full_timeout {
+                println!("{:?} ran out of time", self.my_id);
                 break;
             }
         }
