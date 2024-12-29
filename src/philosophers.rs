@@ -419,8 +419,14 @@ where
     fn be_selfish_helper(&mut self, quick_timeout: Duration, full_timeout: Duration) {
         let start_time = Instant::now();
         while self.send_single_request(None)[1] {
-            let _did_receive_something = self.receive_resource(quick_timeout);
-            if start_time.elapsed() > full_timeout {
+            let mut did_receive_something = self.receive_resource(quick_timeout);
+            while !did_receive_something {
+                did_receive_something = self.receive_resource(quick_timeout);
+                if start_time.elapsed() > full_timeout {
+                    break;
+                }
+            }
+            if start_time.elapsed() > 10 * full_timeout {
                 break;
             }
         }
