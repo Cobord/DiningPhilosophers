@@ -41,7 +41,7 @@ pub(crate) trait DAGImplementor<NodeId, NodeData, EdgeData>: seal::Sealed {
     #[allow(dead_code)]
     fn all_sequential(
         dummy_node_data: fn(&NodeData) -> NodeData,
-        more_nodes: impl IntoIterator<Item = NodeData>,
+        more_nodes: impl IntoIterator<Item = (EdgeData, NodeData)>,
     ) -> Self;
 }
 
@@ -114,10 +114,21 @@ impl<NodeData, EdgeData> DAGImplementor<MyDAGNode, NodeData, EdgeData>
     }
 
     fn all_sequential(
-        _dummy_node_data: fn(&NodeData) -> NodeData,
-        _more_nodes: impl IntoIterator<Item = NodeData>,
+        dummy_node_data: fn(&NodeData) -> NodeData,
+        more_nodes: impl IntoIterator<Item = (EdgeData, NodeData)>,
     ) -> Self {
-        todo!("all sequential")
+        let mut to_return = Self::new(dummy_node_data);
+        let mut previous_node = None;
+        for (weight_incoming_edge, new_node) in more_nodes {
+            let current_node = to_return.underlying.add_node(new_node);
+            if let Some(prev_node) = previous_node {
+                to_return
+                    .underlying
+                    .add_edge(prev_node, current_node, weight_incoming_edge);
+            }
+            previous_node = Some(current_node);
+        }
+        to_return
     }
 }
 
