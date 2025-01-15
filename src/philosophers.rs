@@ -482,7 +482,12 @@ where
     /// otherwise it is a combination of doing own jobs and responding to requests
     /// can stop when the number of jobs in the system reaches 0
     /// or with the `full_timeout`
-    fn just_clear_backlog(&mut self, quick_timeout: Duration, full_timeout: Duration) {
+    fn just_clear_backlog(
+        &mut self,
+        quick_timeout: Duration,
+        full_timeout: Duration,
+        stopper: Option<Receiver<()>>,
+    ) {
         let mut est_time_used = Duration::from_millis(0);
         let start_time = Instant::now();
         while est_time_used < full_timeout {
@@ -500,7 +505,11 @@ where
             drop(j);
             if self.context_queue.is_empty() {
                 //println!("{:?} is going to be selfless", self.my_id);
-                self.be_selfless_helper(quick_timeout, full_timeout);
+                if let Some(stopper) = stopper {
+                    self.be_selfless(quick_timeout, stopper);
+                } else {
+                    self.be_selfless_helper(quick_timeout, full_timeout);
+                }
                 break;
             }
             let [mut had_request_to_send, mut sent_a_request] = self.send_single_request(None);
@@ -560,6 +569,7 @@ where
         quick_timeout: Duration,
         full_timeout: Duration,
         context_or_stop: Receiver<Option<Context>>,
+        stop_all: Option<Receiver<()>>,
     ) {
         loop {
             if self.context_queue.is_empty() {
@@ -610,7 +620,7 @@ where
                     // that way in `just_clear_backlog` we can be sure that if it reaches 0
                     // it is safe to stop and we don't have to be selfless anymore
                     sleep(full_timeout);
-                    self.just_clear_backlog(quick_timeout, full_timeout);
+                    self.just_clear_backlog(quick_timeout, full_timeout, stop_all);
                     break;
                 }
                 Err(_) => {}
@@ -710,7 +720,7 @@ where
         let (work_or_stop_send, work_or_stop) = mpsc::channel();
         work_or_stop_signals.push(work_or_stop_send);
         let jh = spawn(move || {
-            philo.be_fair(QUICK_TIMEOUT, FULL_TIMEOUT, work_or_stop);
+            philo.be_fair(QUICK_TIMEOUT, FULL_TIMEOUT, work_or_stop, None);
             philo
         });
         join_handles.push(jh);
@@ -770,7 +780,7 @@ where
     let mut join_handles = Vec::with_capacity(num_philosophers);
     for mut philo in philosophers {
         let jh = spawn(move || {
-            philo.just_clear_backlog(QUICK_TIMEOUT, FULL_TIMEOUT);
+            philo.just_clear_backlog(QUICK_TIMEOUT, FULL_TIMEOUT, None);
             philo
         });
         join_handles.push(jh);
