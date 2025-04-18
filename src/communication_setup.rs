@@ -158,7 +158,6 @@ where
                 return false;
             }
         }
-        // TODO: other expected validity constraints
         true
     }
 
